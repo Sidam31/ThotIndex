@@ -191,23 +191,6 @@ class MainController(QMainWindow):
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
         
-        # Toolbar / Buttons
-        btn_layout = QHBoxLayout()
-        self.btn_load = QPushButton("Load Image & TSV")
-        self.btn_load.clicked.connect(self.load_files)
-        self.btn_save = QPushButton("Save TSV")
-        self.btn_save.clicked.connect(self.save_tsv)
-        
-        # Add Creation Mode Button
-        self.btn_create = QPushButton("Add BBox (N)")
-        self.btn_create.setCheckable(True)
-        self.btn_create.toggled.connect(self.toggle_creation_mode)
-        
-        btn_layout.addWidget(self.btn_load)
-        btn_layout.addWidget(self.btn_save)
-        btn_layout.addWidget(self.btn_create)
-        layout.addLayout(btn_layout)
-        
         # Splitter for Image and Table
         splitter = QSplitter(Qt.Orientation.Vertical)
         
@@ -245,6 +228,29 @@ class MainController(QMainWindow):
     def setup_menu(self):
         """Setup menu bar with settings."""
         menubar = self.menuBar()
+        
+        # File menu
+        file_menu = menubar.addMenu("&Fichier")
+        
+        load_image_action = file_menu.addAction("Load &Image...")
+        load_image_action.triggered.connect(self.load_image)
+        
+        load_tsv_action = file_menu.addAction("Load &TSV...")
+        load_tsv_action.triggered.connect(self.load_tsv)
+        
+        file_menu.addSeparator()
+        
+        save_tsv_action = file_menu.addAction("&Save TSV")
+        save_tsv_action.setShortcut("Ctrl+S")
+        save_tsv_action.triggered.connect(self.save_tsv)
+        
+        file_menu.addSeparator()
+        
+        add_box_action = file_menu.addAction("&Add Box")
+        add_box_action.setShortcut("N")
+        add_box_action.triggered.connect(lambda: self.btn_create.setChecked(not self.btn_create.isChecked()))
+        
+        # Settings menu
         settings_menu = menubar.addMenu("&Paramètres")
         
         config_action = settings_menu.addAction("&Configuration...")
@@ -283,6 +289,17 @@ class MainController(QMainWindow):
         create_bbox_shortcut = QShortcut(QKeySequence(config.get_shortcut('create_bbox')), self)
         create_bbox_shortcut.activated.connect(self.image_view.toggle_creation_mode)
         create_bbox_shortcut.activated.connect(lambda: self.btn_create.setChecked(self.image_view.creation_mode))
+
+        # Toggle Calibration shortcut
+        toggle_calibration_shortcut = QShortcut(QKeySequence(config.get_shortcut('toggle_calibration')), self)
+        toggle_calibration_shortcut.activated.connect(self.toggle_calibration)
+
+    def toggle_calibration(self):
+        """Toggle visibility of the calibration area."""
+        is_visible = self.calibration_area.isVisible()
+        self.calibration_area.setVisible(not is_visible)
+        # Also hide the splitter handle if possible, or just the widget is enough.
+        # When a widget in a splitter is hidden, the splitter usually handles it.
     
     def show_settings_dialog(self):
         """Show settings dialog and reload shortcuts/theme if settings changed."""
@@ -339,12 +356,58 @@ class MainController(QMainWindow):
         pixmap = QPixmap(img_path)
         self.image_view.set_image(pixmap)
         
+        # Store image filepath in data_model
+        self.data_model.image_filepath = img_path
+        
         # Load Data
         try:
             self.data_model.load_data(tsv_path)
             self.populate_table()
             self.setup_calibration_ui()
             self.draw_bboxes()
+        except Exception as e:
+            self.logger.error(f"Error loading data: {e}")
+    
+    def load_image(self):
+        """Load an image file separately."""
+        img_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg *.tif)")
+        if not img_path:
+            return
+        
+        self.logger.info(f"Loading image: {img_path}")
+        
+        # Load Image
+        pixmap = QPixmap(img_path)
+        self.image_view.set_image(pixmap)
+        
+        # Store image filepath in data_model
+        self.data_model.image_filepath = img_path
+        
+        # Save config if TSV is already loaded
+        if self.data_model.filepath:
+            self.data_model.save_config()
+        
+        # Redraw bboxes if data is loaded
+        if self.data_model.df is not None:
+            self.draw_bboxes()
+    
+    def load_tsv(self):
+        """Load a TSV file separately."""
+        tsv_path, _ = QFileDialog.getOpenFileName(self, "Open TSV", "", "TSV Files (*.tsv *.csv *.txt)")
+        if not tsv_path:
+            return
+        
+        self.logger.info(f"Loading TSV: {tsv_path}")
+        
+        # Load Data
+        try:
+            self.data_model.load_data(tsv_path)
+            self.populate_table()
+            self.setup_calibration_ui()
+            
+            # Draw bboxes if image is loaded
+            if not self.image_view.pixmap_item.pixmap().isNull():
+                self.draw_bboxes()
         except Exception as e:
             self.logger.error(f"Error loading data: {e}")
 

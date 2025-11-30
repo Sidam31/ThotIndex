@@ -24,8 +24,133 @@ class SettingsDialog(QDialog):
         self.temp_colors = {}
         self.temp_ui_params = {}
         
+        # Apply dark mode theme
+        self.apply_dark_theme()
+        
         self.setup_ui()
         self.load_current_settings()
+    
+    def apply_dark_theme(self):
+        """Apply dark mode theme to the dialog."""
+        bg = self.config.config.get("colors", {}).get("background", "#2b2b2b")
+        btn_primary = self.config.config.get("colors", {}).get("button_primary", "#007acc")
+        btn_hover = self.config.config.get("colors", {}).get("button_hover", "#0098ff")
+        btn_pressed = self.config.config.get("colors", {}).get("button_pressed", "#005c99")
+        
+        self.setStyleSheet(f"""
+            QDialog, QWidget {{
+                background-color: {bg};
+                color: #ffffff;
+                font-family: 'Segoe UI', sans-serif;
+                font-size: 10pt;
+            }}
+            
+            QTabWidget::pane {{
+                border: 1px solid #333333;
+                background-color: {bg};
+            }}
+            
+            QTabBar::tab {{
+                background-color: #1e1e1e;
+                color: #ffffff;
+                padding: 8px 16px;
+                border: 1px solid #333333;
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                margin-right: 2px;
+            }}
+            
+            QTabBar::tab:selected {{
+                background-color: {bg};
+                color: #ffffff;
+                border-bottom: 2px solid {btn_primary};
+            }}
+            
+            QTabBar::tab:hover {{
+                background-color: #333333;
+            }}
+            
+            QPushButton {{
+                background-color: {btn_primary};
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                min-width: 80px;
+            }}
+            QPushButton:hover {{
+                background-color: {btn_hover};
+            }}
+            QPushButton:pressed {{
+                background-color: {btn_pressed};
+            }}
+            
+            QLabel {{
+                color: #e0e0e0;
+            }}
+            
+            QLineEdit, QKeySequenceEdit {{
+                background-color: #1e1e1e;
+                border: 1px solid #333333;
+                border-radius: 4px;
+                padding: 6px;
+                color: white;
+            }}
+            QLineEdit:focus, QKeySequenceEdit:focus {{
+                border: 1px solid {btn_primary};
+            }}
+            
+            QSlider::groove:horizontal {{
+                border: 1px solid #333333;
+                height: 8px;
+                background: #1e1e1e;
+                margin: 2px 0;
+                border-radius: 4px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {btn_primary};
+                border: 1px solid {btn_primary};
+                width: 18px;
+                height: 18px;
+                margin: -7px 0;
+                border-radius: 9px;
+            }}
+            QSlider::handle:horizontal:hover {{
+                background: {btn_hover};
+            }}
+            
+            QScrollArea {{
+                border: none;
+                background-color: {bg};
+            }}
+            
+            QScrollBar:vertical {{
+                background-color: #1e1e1e;
+                width: 12px;
+                border: none;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: #555555;
+                min-height: 20px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: #666666;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            
+            QMessageBox {{
+                background-color: {bg};
+                color: #ffffff;
+            }}
+            QMessageBox QLabel {{
+                color: #ffffff;
+            }}
+        """)
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -79,7 +204,8 @@ class SettingsDialog(QDialog):
             "pan_left": "Déplacer vers la gauche",
             "pan_right": "Déplacer vers la droite",
             "create_bbox": "Créer BBox",
-            "undo": "Annuler"
+            "undo": "Annuler",
+            "toggle_calibration": "Afficher/Masquer calibration"
         }
         
         for action, label in shortcuts_info.items():
@@ -236,9 +362,24 @@ class SettingsDialog(QDialog):
     def update_color_preview(self, color_name, color):
         """Update color preview label."""
         preview = self.color_widgets[color_name]
+        
+        # Set background color
         palette = preview.palette()
         palette.setColor(preview.backgroundRole(), color)
         preview.setPalette(palette)
+        
+        # Add border and display color values
+        r, g, b, a = color.red(), color.green(), color.blue(), color.alpha()
+        preview.setStyleSheet(f"""
+            QLabel {{
+                background-color: rgba({r}, {g}, {b}, {a});
+                border: 2px solid #666666;
+                border-radius: 4px;
+            }}
+        """)
+        
+        # Set tooltip with color information
+        preview.setToolTip(f"RGBA: ({r}, {g}, {b}, {a})\nHex: {color.name()}")
     
     def accept_changes(self):
         """Apply and save all changes."""

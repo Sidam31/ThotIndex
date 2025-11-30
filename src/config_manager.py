@@ -37,7 +37,8 @@ class ConfigManager:
                 "pan_left": "Q",
                 "pan_right": "D",
                 "create_bbox": "N",
-                "undo": "Ctrl+Z"
+                "undo": "Ctrl+Z",
+                "toggle_calibration": "C"
             },
             "colors": {
                 "bbox_border": [255, 0, 0, 128],

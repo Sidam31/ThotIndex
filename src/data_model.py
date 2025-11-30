@@ -17,9 +17,14 @@ class DataModel:
         
         # Column Centers (0.0 to 1.0)
         self.column_centers = {} # col_index -> float
+        
+        # Filenames for saving to JSON config
+        self.image_filepath = None
+        self.tsv_filepath = None
 
     def load_data(self, filepath):
         self.filepath = filepath
+        self.tsv_filepath = filepath  # Store the TSV filepath
         base, ext = os.path.splitext(filepath)
         self.corr_filepath = f"{base}_corr{ext}"
         
@@ -38,7 +43,7 @@ class DataModel:
             
             # Validate first column
             if not self.df.empty:
-                first_val = str(self.df.iloc[0, 0]).strip('"\' ')
+                first_val = str(self.df.iloc[0, 0]).strip('"').strip("\' ")
                 if not (first_val.startswith('[') and first_val.endswith(']')):
                     self.logger.warning(f"First column does not look like BBox data: {first_val}")
             
@@ -48,9 +53,18 @@ class DataModel:
                 try:
                     import json
                     with open(config_path, 'r') as f:
-                        loaded_centers = json.load(f)
-                        # Convert keys to int (json keys are strings)
-                        self.column_centers = {int(k): v for k, v in loaded_centers.items()}
+                        loaded_config = json.load(f)
+                    
+                    # Handle both old format (dict) and new format (dict with nested structure)
+                    if isinstance(loaded_config, dict):
+                        if "column_centers" in loaded_config:
+                            # New format
+                            self.column_centers = {int(k): v for k, v in loaded_config.get("column_centers", {}).items()}
+                            # We don't load image_filename here since it's set when image is loaded
+                        else:
+                            # Old format - just column centers
+                            self.column_centers = {int(k): v for k, v in loaded_config.items()}
+                    
                     self.logger.info(f"Loaded config from {config_path}")
                 except Exception as e:
                     self.logger.error(f"Failed to load config: {e}")
@@ -133,8 +147,13 @@ class DataModel:
         config_path = self.filepath + ".json"
         try:
             import json
+            config_data = {
+                "column_centers": self.column_centers,
+                "image_filename": os.path.basename(self.image_filepath) if self.image_filepath else None,
+                "tsv_filename": os.path.basename(self.tsv_filepath) if self.tsv_filepath else None
+            }
             with open(config_path, 'w') as f:
-                json.dump(self.column_centers, f)
+                json.dump(config_data, f, indent=2)
             self.logger.info(f"Saved config to {config_path}")
         except Exception as e:
             self.logger.error(f"Failed to save config: {e}")

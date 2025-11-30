@@ -1,0 +1,31 @@
+Act as an expert paleographer specializing in 19th-century French handwriting. Transcribe the attached image into CSV format.
+
+Strict Transcription Rules:
+
+    Do not guess. If a word or number is illegible, write [?] or [illisible]. Do not hallucinate plausible names or dates to fill gaps.
+
+    Digit Precision: Pay extreme attention to the 'Numbers' and 'Dates' columns. In this specific handwriting style, the number '4' often looks like a '1' but usually has a slight crossbar or angle. The number '7' is often crossed. If unsure between a 1 and a 4, mark it as [1 or 4?].
+
+    Letter Sensitivity: Distinguish carefully between uppercase 'S', 'L', and 'T', which are stylistically similar in this era. Distinguish n from t, the latter often has a crossbar.
+
+    Preserve Abbreviations: Expand the original abbreviations (e.g., Septembre for '7bre', Décembre for 'Xbre', Saint for 'St', marié(e) for `me`, Veuve for 'Vve', Veuf for 'Vf') rather than keeping the original.
+
+    date format: All date must have the format day/month/year in digits (DD/MM/YYY)
+
+   hour format: all hours must be in a 24 format, meaning that 4. h. s. is 16:00 and 3. h. m. is 03:00
+
+   Surname format: must be capitalized, but keep the accents and special character if there is.
+
+    Verbatim: Transcribe exactly what is written, including spelling errors found in the original text. There some exception to it:
+        - If the column is not filled write "N/C"
+       - in case "id" is written meaning the same as the above, write what was above.
+       - In case the place is not in France have the country name between []
+       - in case of an adress write if with this format: "1, rue borrego (Télégraphe)" adress number, then adress name then in parenthesis the division/Neighbourhood
+
+    Bounding box: the first column should provide a bounding box of the row in comment ([ymin, xmin, ymax, xmax]) scaled between 0 and 1000.
+    If there is comments on the transcription in "Commentaires", you list the % of certitude of transcription per column if it is lower than 95%.
+
+Only transcribe thoses columns:
+Bounding Box	N° d'ordre	DATE du DÉCÈS	HEURE	DATE de L'ENTRÉE	NOM de la SALLE	Numéro d'enregistrement	Numéro de chambre	Noms	Prénoms	Age	Profession	État civil	Domicile	Lieu de Naissance	Cause de la Mort	Observations	Commentaires
+
+Export the data in tabulation separated format (TSV)

@@ -1,22 +1,26 @@
 import sys
 import os
+import threading
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QPushButton, QFileDialog, QTableView, QSplitter,
-                               QScrollArea, QLabel, QSlider, QLineEdit, QMenu)
+                               QScrollArea, QLabel, QSlider, QLineEdit, QMenu, QMessageBox)
 from PySide6.QtGui import QPixmap, QKeySequence, QShortcut, QDoubleValidator
-from PySide6.QtCore import QAbstractTableModel, Qt
+from PySide6.QtCore import QAbstractTableModel, Qt, Signal, QObject
 
 from src.logger import setup_logging
 from src.data_model import DataModel
 from src.image_view import ImageView
 from src.config_manager import ConfigManager
 from src.settings_dialog import SettingsDialog
+from src.version_checker import check_for_updates
 import logging
+
+__version__ = "0.1.1"
 
 class MainController(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ThotIndex - Registre Indexer")
+        self.setWindowTitle(f"ThotIndex - Indexeur de tableaux v{__version__}")
         self.resize(1200, 800)
         
         self.logger = logging.getLogger(__name__)
@@ -31,6 +35,9 @@ class MainController(QMainWindow):
         self.setup_shortcuts()
         self.setup_global_shortcuts()
         self.apply_modern_theme()
+        
+        # Check for updates asynchronously
+        self.check_version_async()
 
     def apply_modern_theme(self):
         """Apply theme using colors from config."""
@@ -125,8 +132,6 @@ class MainController(QMainWindow):
                 color: #e0e0e0;
             }}
         """)
-
-    # ... (setup_ui and setup_shortcuts remain mostly same, just import QLineEdit)
 
     def setup_calibration_ui(self):
         # Clear existing
@@ -232,21 +237,18 @@ class MainController(QMainWindow):
         # File menu
         file_menu = menubar.addMenu("&Fichier")
         
-        load_image_action = file_menu.addAction("Load &Image...")
+        load_image_action = file_menu.addAction("Charger une &Image...")
         load_image_action.triggered.connect(self.load_image)
-        
-        load_tsv_action = file_menu.addAction("Load &TSV...")
-        load_tsv_action.triggered.connect(self.load_tsv)
         
         file_menu.addSeparator()
         
-        save_tsv_action = file_menu.addAction("&Save TSV")
+        save_tsv_action = file_menu.addAction("&Sauver le TSV")
         save_tsv_action.setShortcut("Ctrl+S")
         save_tsv_action.triggered.connect(self.save_tsv)
         
         file_menu.addSeparator()
         
-        add_box_action = file_menu.addAction("&Add Box")
+        add_box_action = file_menu.addAction("&Nouvelle boite")
         add_box_action.setShortcut("N")
         add_box_action.triggered.connect(lambda: self.btn_create.setChecked(not self.btn_create.isChecked()))
         
@@ -300,6 +302,34 @@ class MainController(QMainWindow):
         self.calibration_area.setVisible(not is_visible)
         # Also hide the splitter handle if possible, or just the widget is enough.
         # When a widget in a splitter is hidden, the splitter usually handles it.
+    
+    def check_version_async(self):
+        """Check for updates asynchronously to avoid blocking startup."""
+        def version_check_thread():
+            is_newer, latest_version = check_for_updates(__version__)
+            # Safely invoke the UI update from the main thread
+            if is_newer and latest_version:
+                # Use Qt's signal mechanism or direct call depending on thread safety
+                # For simplicity, we'll use QMetaObject.invokeMethod or similar
+                # But since we can't easily cross thread boundaries, we'll use a simple approach
+                self.on_version_check_complete(is_newer, latest_version)
+        
+        # Start the check in a background thread
+        thread = threading.Thread(target=version_check_thread, daemon=True)
+        thread.start()
+    
+    def on_version_check_complete(self, is_newer, latest_version):
+        """Handle the result of the version check."""
+        if is_newer:
+            QMessageBox.information(
+                self,
+                "Mise à jour disponible / Update Available",
+                f"Une nouvelle version est disponible : {latest_version}\n"
+                f"Version actuelle : {__version__}\n\n"
+                f"A new version is available: {latest_version}\n"
+                f"Current version: {__version__}\n\n"
+                f"Visitez / Visit: https://github.com/Sidam31/ThotIndex/releases"
+            )
     
     def show_settings_dialog(self):
         """Show settings dialog and reload shortcuts/theme if settings changed."""
@@ -390,10 +420,15 @@ class MainController(QMainWindow):
         # Redraw bboxes if data is loaded
         if self.data_model.df is not None:
             self.draw_bboxes()
+        tsv_path = os.path.splitext(img_path)[0] + ".tsv"
+        if not os.path.exists(tsv_path):
+            tsv_path = None
+        self.load_tsv(tsv_path)
     
-    def load_tsv(self):
+    def load_tsv(self, tsv_path=None):
         """Load a TSV file separately."""
-        tsv_path, _ = QFileDialog.getOpenFileName(self, "Open TSV", "", "TSV Files (*.tsv *.csv *.txt)")
+        if tsv_path is None:
+            tsv_path, _ = QFileDialog.getOpenFileName(self, "Open TSV", "", "TSV Files (*.tsv *.csv *.txt)")
         if not tsv_path:
             return
         

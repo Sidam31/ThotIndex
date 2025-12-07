@@ -3,7 +3,8 @@ import os
 import threading
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QPushButton, QFileDialog, QTableView, QSplitter,
-                               QScrollArea, QLabel, QSlider, QLineEdit, QMenu, QMessageBox)
+                               QScrollArea, QLabel, QSlider, QLineEdit, QMenu, QMessageBox,
+                               QDialog, QProgressDialog, QInputDialog)
 from PySide6.QtGui import QPixmap, QKeySequence, QShortcut, QDoubleValidator
 from PySide6.QtCore import QAbstractTableModel, Qt, Signal, QObject
 
@@ -13,9 +14,12 @@ from src.image_view import ImageView
 from src.config_manager import ConfigManager
 from src.settings_dialog import SettingsDialog
 from src.version_checker import check_for_updates
+from src.web_fetcher import WebFetcher
+from src.image_downloader import ImageDownloader
+from src.gemini_api import GeminiAPI
 import logging
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 class MainController(QMainWindow):
     def __init__(self):
@@ -29,6 +33,11 @@ class MainController(QMainWindow):
         
         self.calibration_widgets = {} # col_index -> QLineEdit
         self.calibration_labels = {} # col_index -> QLabel
+        
+        # Initialize web fetching components
+        self.web_fetcher = WebFetcher()
+        self.image_downloader = ImageDownloader()
+        self.gemini_api = GeminiAPI()
         
         self.setup_ui()
         self.setup_menu()
@@ -239,6 +248,12 @@ class MainController(QMainWindow):
         
         load_image_action = file_menu.addAction("Charger une &Image...")
         load_image_action.triggered.connect(self.load_image)
+        
+        file_menu.addSeparator()
+        
+        fetch_url_action = file_menu.addAction("&Récupérer depuis URL...")
+        fetch_url_action.setShortcut("Ctrl+U")
+        fetch_url_action.triggered.connect(self.fetch_from_url)
         
         file_menu.addSeparator()
         
@@ -593,6 +608,157 @@ class MainController(QMainWindow):
                 if hasattr(self, 'model'):
                     self.model.dataChanged.emit(index, index, [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.BackgroundRole])
                 self.logger.info(f"Reverted cell ({row}, {col}) to original value")
+    
+    def fetch_from_url(self):
+        """
+        Fetch image from APHP archive URL, download it, send to Gemini API,
+        and load the resulting image and TSV.
+        """
+        # Get URL from user
+        url, ok = QInputDialog.getText(
+            self,
+            "Récupérer depuis URL",
+            "Entrez l'URL de l'archive APHP:",
+            QLineEdit.EchoMode.Normal
+        )
+        
+        if not ok or not url:
+            return
+        
+        # Check if API key is configured
+        api_key = self.config.get_api_key()
+        if not api_key:
+            QMessageBox.warning(
+                self,
+                "Clé API manquante",
+                "Veuillez configurer votre clé API Gemini dans Paramètres > API & Téléchargements"
+            )
+            self.show_settings_dialog()
+            return
+        
+        # Configure API and downloader
+        download_dir = self.config.get_download_directory()
+        self.image_downloader.set_download_directory(download_dir)
+        self.gemini_api.configure(api_key)
+        
+        # Create progress dialog
+        progress = QProgressDialog("Récupération en cours...", "Annuler", 0, 4, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setWindowTitle("Traitement")
+        progress.show()
+        
+        try:
+            # Step 1: Fetch image URL
+            progress.setLabelText("Extraction de l'URL de l'image...")
+            progress.setValue(1)
+            QApplication.processEvents()
+            
+            image_url, cote, page = self.web_fetcher.fetch_image_url(url)
+            
+            if not image_url:
+                progress.close()
+                QMessageBox.critical(
+                    self,
+                    "Erreur",
+                    "Impossible d'extraire l'URL de l'image depuis la page."
+                )
+                return
+            
+            if progress.wasCanceled():
+                return
+            
+            # Step 2: Download image
+            progress.setLabelText(f"Téléchargement de l'image ({cote}_{page})...")
+            progress.setValue(2)
+            QApplication.processEvents()
+            
+            image_path = self.image_downloader.download_image(image_url, cote, page)
+            
+            if not image_path:
+                progress.close()
+                QMessageBox.critical(
+                    self,
+                    "Erreur",
+                    "Impossible de télécharger l'image."
+                )
+                return
+            
+            if progress.wasCanceled():
+                return
+            
+            # Step 3: Send to Gemini API
+            progress.setLabelText("Envoi à l'API Gemini pour transcription...")
+            progress.setValue(3)
+            QApplication.processEvents()
+            
+            tsv_path = self.gemini_api.process_image(image_path)
+            
+            if not tsv_path:
+                progress.close()
+                QMessageBox.critical(
+                    self,
+                    "Erreur",
+                    "Impossible de transcrire l'image via l'API Gemini."
+                )
+                # Still load the image even if transcription failed
+                self.load_image_only(image_path)
+                return
+            
+            if progress.wasCanceled():
+                return
+            
+            # Step 4: Load image and TSV
+            progress.setLabelText("Chargement de l'image et du TSV...")
+            progress.setValue(4)
+            QApplication.processEvents()
+            
+            # Load the image
+            pixmap = QPixmap(image_path)
+            self.image_view.set_image(pixmap)
+            self.data_model.image_filepath = image_path
+            
+            # Load the TSV
+            try:
+                self.data_model.load_data(tsv_path)
+                self.populate_table()
+                self.setup_calibration_ui()
+                self.draw_bboxes()
+            except Exception as e:
+                self.logger.error(f"Error loading TSV data: {e}")
+                QMessageBox.warning(
+                    self,
+                    "Avertissement",
+                    f"Image chargée mais erreur lors du chargement du TSV: {e}"
+                )
+            
+            progress.close()
+            
+            QMessageBox.information(
+                self,
+                "Succès",
+                f"Image téléchargée et transcrite avec succès!\n\nImage: {os.path.basename(image_path)}\nTSV: {os.path.basename(tsv_path)}"
+            )
+            
+        except Exception as e:
+            progress.close()
+            self.logger.error(f"Error in fetch_from_url: {e}")
+            QMessageBox.critical(
+                self,
+                "Erreur",
+                f"Une erreur s'est produite: {str(e)}"
+            )
+    
+    def load_image_only(self, image_path):
+        """
+        Load only the image without TSV data.
+        
+        Args:
+            image_path (str): Path to the image file
+        """
+        pixmap = QPixmap(image_path)
+        self.image_view.set_image(pixmap)
+        self.data_model.image_filepath = image_path
+        self.logger.info(f"Loaded image: {image_path}")
 
 if __name__ == "__main__":
     setup_logging()

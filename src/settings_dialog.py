@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, 
                                QWidget, QPushButton, QLabel, QLineEdit, QSlider,
                                QColorDialog, QFormLayout, QScrollArea, QMessageBox,
-                               QKeySequenceEdit)
+                               QKeySequenceEdit, QFileDialog)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QKeySequence
 from src.config_manager import ConfigManager
@@ -162,10 +162,12 @@ class SettingsDialog(QDialog):
         self.shortcuts_tab = self.create_shortcuts_tab()
         self.colors_tab = self.create_colors_tab()
         self.ui_tab = self.create_ui_tab()
+        self.api_tab = self.create_api_tab()
         
         self.tabs.addTab(self.shortcuts_tab, "Raccourcis clavier")
         self.tabs.addTab(self.colors_tab, "Couleurs")
         self.tabs.addTab(self.ui_tab, "Interface")
+        self.tabs.addTab(self.api_tab, "API & Téléchargements")
         
         layout.addWidget(self.tabs)
         
@@ -325,6 +327,55 @@ class SettingsDialog(QDialog):
         
         return container
     
+    def create_api_tab(self):
+        """Create the API configuration tab."""
+        widget = QWidget()
+        layout = QFormLayout(widget)
+        
+        # Gemini API Key
+        self.api_key_input = QLineEdit()
+        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.api_key_input.setPlaceholderText("Entrez votre clé API Gemini")
+        
+        api_key_layout = QVBoxLayout()
+        api_key_layout.addWidget(self.api_key_input)
+        api_key_help = QLabel("Obtenez une clé API sur: https://makersuite.google.com/app/apikey")
+        api_key_help.setStyleSheet("color: #888888; font-size: 9pt;")
+        api_key_layout.addWidget(api_key_help)
+        
+        layout.addRow("Clé API Gemini:", api_key_layout)
+        
+        # Download Directory
+        download_dir_layout = QHBoxLayout()
+        self.download_dir_input = QLineEdit()
+        self.download_dir_input.setPlaceholderText("Répertoire de téléchargement")
+        
+        browse_btn = QPushButton("Parcourir...")
+        browse_btn.clicked.connect(self.browse_download_dir)
+        
+        download_dir_layout.addWidget(self.download_dir_input)
+        download_dir_layout.addWidget(browse_btn)
+        
+        layout.addRow("Répertoire de téléchargement:", download_dir_layout)
+        
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.addWidget(widget)
+        container_layout.addStretch()
+        
+        return container
+    
+    def browse_download_dir(self):
+        """Open dialog to select download directory."""
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Sélectionner le répertoire de téléchargement",
+            self.download_dir_input.text() or "."
+        )
+        
+        if directory:
+            self.download_dir_input.setText(directory)
+    
     def load_current_settings(self):
         """Load current settings from config."""
         # Load shortcuts
@@ -342,6 +393,10 @@ class SettingsDialog(QDialog):
         zoom_factor = self.config.get_ui_param("zoom_factor")
         self.ui_widgets["zoom_factor"].setValue(int(zoom_factor * 100))
         self.ui_widgets["bbox_resize_margin"].setValue(self.config.get_ui_param("bbox_resize_margin"))
+        
+        # Load API settings
+        self.api_key_input.setText(self.config.get_api_key())
+        self.download_dir_input.setText(self.config.get_download_directory())
     
     def choose_color(self, color_name):
         """Open color picker dialog."""
@@ -396,6 +451,10 @@ class SettingsDialog(QDialog):
         self.config.update_ui_param("pan_step", self.ui_widgets["pan_step"].value())
         self.config.update_ui_param("zoom_factor", self.ui_widgets["zoom_factor"].value() / 100.0)
         self.config.update_ui_param("bbox_resize_margin", self.ui_widgets["bbox_resize_margin"].value())
+        
+        # Save API settings
+        self.config.set_api_key(self.api_key_input.text())
+        self.config.set_download_directory(self.download_dir_input.text())
         
         self.settings_changed.emit()
         self.accept()

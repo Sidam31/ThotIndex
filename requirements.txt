@@ -4,3 +4,7 @@ openpyxl
 pyinstaller
 requests
 packaging
+beautifulsoup4
+google-generativeai
+lxml
+Pillow

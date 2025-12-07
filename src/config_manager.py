@@ -54,6 +54,10 @@ class ConfigManager:
                 "pan_step": 50,
                 "zoom_factor": 1.2,
                 "bbox_resize_margin": 10
+            },
+            "api": {
+                "gemini_api_key": "",
+                "download_directory": "downloaded_images"
             }
         }
     
@@ -144,6 +148,28 @@ class ConfigManager:
         if "ui" not in self.config:
             self.config["ui"] = {}
         self.config["ui"][name] = value
+        self.save_config()
+    
+    def get_api_key(self):
+        """Get Gemini API key."""
+        return self.config.get("api", {}).get("gemini_api_key", "")
+    
+    def set_api_key(self, api_key):
+        """Set Gemini API key."""
+        if "api" not in self.config:
+            self.config["api"] = {}
+        self.config["api"]["gemini_api_key"] = api_key
+        self.save_config()
+    
+    def get_download_directory(self):
+        """Get download directory."""
+        return self.config.get("api", {}).get("download_directory", "downloaded_images")
+    
+    def set_download_directory(self, directory):
+        """Set download directory."""
+        if "api" not in self.config:
+            self.config["api"] = {}
+        self.config["api"]["download_directory"] = directory
         self.save_config()
     
     def reset_to_defaults(self):
